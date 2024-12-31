@@ -1,10 +1,10 @@
 {
 ---------------------------------------------------------------------------------------------------
-    Filename:       display.led.max72xx.spin
+    Filename:       display.led.max72xx.spin2
     Description:    Driver for the MAX72xx LED/7-segment display driver
     Author:         Jesse Burt
-    Started:        Jul 24, 2022
-    Updated:        Dec 30, 2024
+    Started:        Dec 31, 2024
+    Updated:        Dec 31, 2024
     Copyright (c) 2024 - See end of file for terms of use.
 ---------------------------------------------------------------------------------------------------
 }
@@ -15,7 +15,7 @@ CON
     SCK     = 1
     MOSI    = 2
     WIDTH   = 8
-
+    SPI_FREQ= 1_000_000                         ' max spec is 10MHz
 
     { decimal point bit }
     DPNT    = (1 << 7)
@@ -30,14 +30,8 @@ VAR
 
 OBJ
 
-{ decide: Bytecode SPI engine, or PASM? Default is PASM if BC isn't specified }
-#ifdef MAX72XX_SPI_BC
-    spi:    "com.spi.25khz.nocog"               ' BC SPI engine
-#else
-    spi:    "com.spi.1mhz"                      ' PASM SPI engine
-#endif
+    spi:    "com.spi.25mhz"                      ' PASM SPI engine
     core:   "core.con.max72xx"                  ' hw-specific constants
-    time:   "time"                              ' timing functions
 
 
 PUB null()
@@ -46,20 +40,20 @@ PUB null()
 
 PUB start(): status
 ' Start the driver using default I/O settings
-    return startx(CS, SCK, MOSI)
+    return startx(CS, SCK, MOSI, SPI_FREQ)
 
 
-PUB startx(CS_PIN, SCK_PIN, MOSI_PIN): status
+PUB startx(CS_PIN, SCK_PIN, MOSI_PIN, SPI_HZ): status
 ' Start using custom IO pins
-'   CS_PIN:     SPI chip select, 0..31
-'   SCK_PIN:    serial clock, 0..31
-'   MOSI_PIN:   master-out slave-in, 0..31
-    if ( lookdown(CS_PIN: 0..31) and lookdown(SCK_PIN: 0..31) and lookdown(MOSI_PIN: 0..31) )
-        if ( status := spi.init(SCK_PIN, MOSI_PIN, -1, core.SPI_MODE) )
-            time.msleep(core.T_POR)             ' wait for device startup
+'   CS_PIN:     SPI chip select, 0..63
+'   SCK_PIN:    serial clock, 0..63
+'   MOSI_PIN:   master-out slave-in, 0..63
+'   SPI_HZ:     SPI bus clock speed, up to 10_000_000 (unenforced)
+    if ( lookdown(CS_PIN: 0..63) and lookdown(SCK_PIN: 0..63) and lookdown(MOSI_PIN: 0..63) )
+        if ( status := spi.init(SCK_PIN, MOSI_PIN, -1, core.SPI_MODE, SPI_HZ) )
+            waitms(core.T_POR)             ' wait for device startup
             _CS := CS_PIN                       ' copy i/o pin to hub var
-            outa[_CS] := 1
-            dira[_CS] := 1
+            pinh(_CS)
             disp_sz(WIDTH)
             return
     ' if this point is reached, something above failed
@@ -142,15 +136,15 @@ PUB putchar(ch) | d, byte db[WIDTH], byte buf[2]
     bytemove(@db, @_disp_buffer, WIDTH)         ' copy the current display buffer to a temporary one
     _disp_buffer[_ptr] := ch                    ' before updating the current one
 
-    repeat d from 0 to WIDTH-1
+    repeat WIDTH with d
         if ( (_disp_buffer[d] <> db[d]) )
         ' only send data to the display if this character is different than the character
         '   that's already in this position in the display
             buf[0] := core.DIG_7-d
             buf[1] := _disp_buffer[d]
-            outa[_CS] := 0
+            pinl(_CS)
                 spi.wrblock_lsbf(@buf, 2)
-            outa[_CS] := 1
+            pinh(_CS)
 
     _ptr++
     if ( _ptr > WIDTH-1 )
@@ -165,10 +159,10 @@ PUB test_mode(s)
 PRI writereg(reg_nr, val)
 ' Write nr_bytes to the device from ptr_buff
     if ( lookdown(reg_nr: core.NO_OP..core.DISP_TEST) )
-        outa[_CS] := 0
+        pinl(_CS)
             spi.wr_byte(reg_nr)
             spi.wr_byte(val)
-        outa[_CS] := 1
+        pinh(_CS)
 
 
 DAT
@@ -187,7 +181,7 @@ _digits     byte    %111_1110   ' 0
             byte    %111_1011   ' 9
 
 
-#include "terminal.common.spinh"                ' use common terminal I/O routines (strings, etc)
+#include "terminal.common.spin2h"               ' use common terminal I/O routines (strings, etc)
 
 
 DAT
