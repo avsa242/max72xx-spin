@@ -9,6 +9,9 @@
     Copyright (c) 2024 - See end of file for terms of use.
 ---------------------------------------------------------------------------------------------------
 }
+' Uncomment the two lines below to use the bytecode-based SPI engine in the driver
+'#define MAX72XX_SPI_BC
+'#pragma exportdef(MAX72XX_SPI_BC)
 
 CON
 
@@ -35,10 +38,9 @@ PUB main() | i
         repeat i from 0 to 1234_5678
             led.pos_xy(0, 0)
             led.puts(str.decpads(i, 8))
-        ser.getchar()
 
 
-PUB Setup()
+PUB setup()
 
     ser.start()
     time.msleep(30)

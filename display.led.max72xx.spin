@@ -34,7 +34,7 @@ OBJ
 #ifdef MAX72XX_SPI_BC
     spi:    "com.spi.25khz.nocog"               ' BC SPI engine
 #else
-    spi:    "com.spi.4mhz"                      ' PASM SPI engine
+    spi:    "com.spi.1mhz"                      ' PASM SPI engine
 #endif
     core:   "core.con.max72xx"                  ' hw-specific constants
     time:   "time"                              ' timing functions
@@ -127,24 +127,30 @@ PUB powered(s)
         writereg(core.SHUTDN, 0)
 
 
-PUB putchar(ch) | cmap, d
+PUB putchar(ch) | d, byte db[WIDTH], byte buf[2]
 ' Display a single character
     case ch
-        " ", "-":
-            ch := byte[@_charmap][lookdownz(ch: " ", "-")]
         "0".."9":
-            cmap := lookdownz(ch: "0".."9")
-            ch := byte[@_charmap][cmap+2]
+            ch := byte[@_digits][ch-48]
+        " ":
+            ch := byte[@_charmap][0]
+        "-":
+            ch := byte[@_charmap][1]
         other:
             return
 
-    _disp_buffer[_ptr] := ch
+    bytemove(@db, @_disp_buffer, WIDTH)         ' copy the current display buffer to a temporary one
+    _disp_buffer[_ptr] := ch                    ' before updating the current one
 
     repeat d from 0 to WIDTH-1
-        outa[_CS] := 0
-            spi.wr_byte(core.DIG_7-d)
-            spi.wr_byte(_disp_buffer[d])
-        outa[_CS] := 1
+        if ( (_disp_buffer[d] <> db[d]) )
+        ' only send data to the display if this character is different than the character
+        '   that's already in this position in the display
+            buf[0] := core.DIG_7-d
+            buf[1] := _disp_buffer[d]
+            outa[_CS] := 0
+                spi.wrblock_lsbf(@buf, 2)
+            outa[_CS] := 1
 
     _ptr++
     if ( _ptr > WIDTH-1 )
